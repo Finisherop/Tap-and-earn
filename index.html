@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAP & EARN Bot</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* === CSS: Dark Theme and Mobile Friendly UI === */
+        :root {
+            /* Telegram WebApp Theme Vars (Fallback to Dark Theme) */
+            --tg-theme-bg-color: #17212b;
+            --tg-theme-secondary-bg-color: #232e3c;
+            --tg-theme-text-color: #ffffff;
+            --tg-theme-hint-color: #708499;
+            --tg-theme-link-color: #6ab3f3;
+            --tg-theme-button-color: #5288c1;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-header-bg-color: #17212b;
+        }
+
+        /* Override with Telegram WebApp colors if available */
+        body.telegram-web-app-theme {
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            transition: background-color 0.3s, color 0.3s;
+            overflow-x: hidden; /* For screen/tab switching */
+        }
+
+        /* --- Main Layout: Tabs and Screens --- */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 600px; /* Standard mobile width constraint */
+            margin: 0 auto;
+        }
+
+        #screens-container {
+            flex-grow: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: var(--tg-theme-bg-color);
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(100%);
+            overflow-y: auto;
+            display: none; /* Initial hide */
+        }
+
+        .screen.active {
+            transform: translateX(0);
+            display: block;
+        }
+        
+        /* Tab Bar Styling */
+        #tab-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            background-color: var(--tg-theme-header-bg-color);
+            border-top: 1px solid var(--tg-theme-secondary-bg-color);
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            color: var(--tg-theme-hint-color);
+            padding: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+            flex: 1;
+            text-align: center;
+        }
+
+        .tab-button.active {
+            color: var(--tg-theme-link-color);
+            font-weight: bold;
+        }
+        
+        .tab-button span {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 3px;
+        }
+
+        /* --- Tap & Earn Section Specifics --- */
+        #tap-area {
+            text-align: center;
+            padding: 50px 0;
+            cursor: pointer;
+        }
+
+        #usdt-animation-box {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 20px auto;
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(82, 136, 193, 0.5); /* Button Color Glow */
+            animation: bounce 2s infinite alternate; /* Bouncing effect */
+        }
+        
+        #usdt-animation-box span {
+            font-size: 60px;
+            transition: transform 0.1s;
+        }
+
+        @keyframes bounce {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-15px); }
+        }
+
+        /* Coin Credit Animation */
+        .coin-credit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: gold;
+            opacity: 0;
+            animation: credit-anim 0.8s ease-out forwards;
+            pointer-events: none; /* So it doesn't block clicks */
+        }
+
+        @keyframes credit-anim {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -150%) scale(1.5); }
+        }
+
+        /* --- General UI Components --- */
+        h2 {
+            color: var(--tg-theme-link-color);
+            border-bottom: 2px solid var(--tg-theme-secondary-bg-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .level-bar-container {
+            height: 10px;
+            background-color: var(--tg-theme-hint-color);
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .level-bar {
+            height: 100%;
+            width: 0;
+            background-color: gold;
+            transition: width 0.5s ease-out;
+        }
+
+        .task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .task-item:last-child {
+            border-bottom: none;
+        }
+
+        button {
+            background-color: var(--tg-theme-button-color);
+            color: var(--tg-theme-button-text-color);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #6a9cc9; /* Slightly lighter shade */
+        }
+        
+        input[type="text"], input[type="number"], textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            background-color: var(--tg-theme-bg-color);
+            border: 1px solid var(--tg-theme-hint-color);
+            border-radius: 4px;
+            color: var(--tg-theme-text-color);
+        }
+
+        .referral-link-box {
+            background-color: var(--tg-theme-bg-color);
+            padding: 10px;
+            border: 1px dashed var(--tg-theme-link-color);
+            border-radius: 5px;
+            word-break: break-all;
+            margin-top: 10px;
+        }
+
+        /* Admin Section - Only for web browser, hidden in WebApp */
+        body:not(.telegram-web-app-theme) #admin-link {
+            display: block; /* Show in normal browser */
+            text-align: center;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: var(--tg-theme-secondary-bg-color);
+            border-radius: 8px;
+        }
+
+        .admin-stat {
+            font-size: 1.2em;
+            margin: 10px 0;
+            padding: 5px;
+            background-color: var(--tg-theme-bg-color);
+            border-radius: 5px;
+        }
+
+    </style>
+</head>
+<body id="app-body">
+
+    <div id="app-container">
+        
+        <div id="screens-container">
+            
+            <div id="tap-earn-screen" class="screen active">
+                <h2>💰 Tap & Earn</h2>
+                
+                <div class="card">
+                    <p>Current Coins: <strong id="current-coins">0</strong></p>
+                    <p>Level: <strong id="current-level">1</strong></p>
+                    <p>Next Level in: <span id="coins-to-next-level">1000</span> coins</p>
+                    <div class="level-bar-container"><div id="level-progress-bar" class="level-bar"></div></div>
+                </div>
+
+                <div id="tap-area">
+                    <div id="usdt-animation-box">
+                        <span style="font-size: 60px;">💎</span> </div>
+                    <p style="color: var(--tg-theme-hint-color);">Tap the diamond to earn coins!</p>
+                </div>
+            </div>
+
+            <div id="tasks-screen" class="screen">
+                <h2>📋 Tasks & Referrals</h2>
+
+                <div class="card">
+                    <h3>Special Tasks</h3>
+                    <div id="tasks-list">
+                        <div class="task-item">
+                            <span>Watch 3 Ads (Monotag)</span>
+                            <button onclick="watchAds()">+100 Coins</button>
+                        </div>
+                        <div class="task-item" id="channel-task">
+                            <span>Join Our Telegram Channel</span>
+                            <div>
+                                <a id="channel-link" href="#" target="_blank"><button>Join</button></a>
+                                <button onclick="verifyChannelJoin()" id="verify-channel-btn">Verify</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Refer & Earn</h3>
+                    <p>Invite friends and earn **500 coins** per successful referral! 🤝</p>
+                    <div class="referral-link-box" id="referral-link">Loading...</div>
+                    <button onclick="copyReferralLink()">Copy Link</button>
+                </div>
+            </div>
+
+            <div id="withdrawal-screen" class="screen">
+                <h2>💸 Withdrawal</h2>
+                
+                <div class="card">
+                    <p>Conversion Rate: **10,000 Coins = 1 USDT**</p>
+                    <p>Your Balance: <strong id="withdraw-coin-balance">0</strong> Coins</p>
+                    <p>Equivalent USDT: <strong id="usdt-equivalent">0.00</strong> USDT</p>
+                </div>
+
+                <div class="card">
+                    <h3>Request Withdrawal</h3>
+                    <label for="usdt-address">USDT (TRC-20/ERC-20) Wallet Address:</label>
+                    <input type="text" id="usdt-address" placeholder="Enter your USDT wallet address" required>
+                    
+                    <label for="withdraw-amount">Amount (Coins - Min 10000):</label>
+                    <input type="number" id="withdraw-amount" min="10000" step="10000" placeholder="e.g., 10000" required>
+                    
+                    <button onclick="submitWithdrawal()">Submit Request</button>
+                </div>
+
+                <div class="card">
+                    <h3>My Requests</h3>
+                    <div id="withdrawal-history">
+                        <p style="color: var(--tg-theme-hint-color);">No requests found.</p>
+                        </div>
+                </div>
+            </div>
+
+            <div id="profile-screen" class="screen">
+                <h2>👤 Profile</h2>
+
+                <div class="card" style="text-align: center;">
+                    <img id="profile-photo" src="" alt="Profile" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; display: none;">
+                    <p>Telegram ID: <strong id="profile-tg-id">N/A</strong></p>
+                    <p>Username: <strong id="profile-username">N/A</strong></p>
+                </div>
+                
+                <div class="card">
+                    <h3>Stats</h3>
+                    <p>Total Coins: <strong id="profile-coins">0</strong></p>
+                    <p>Current Level: <strong id="profile-level">1</strong></p>
+                    <p>Total Referrals: <strong id="profile-referrals">0</strong></p>
+                </div>
+            </div>
+
+            <div id="admin-panel" class="screen" style="display: none;">
+                <h2>👑 Admin Panel</h2>
+                
+                <div class="card">
+                    <h3>Dashboard</h3>
+                    <p class="admin-stat">Total Users: <strong id="admin-total-users">0</strong></p>
+                    <p class="admin-stat">Total Coins: <strong id="admin-total-coins">0</strong></p>
+                </div>
+
+                <div class="card">
+                    <h3>Conversion Settings</h3>
+                    <p>1 USDT = <input type="number" id="admin-conversion-rate" value="10000" min="1000" step="1000" style="width: 100px; display: inline-block;"> Coins</p>
+                    <button onclick="saveAdminSettings()">Save Settings</button>
+                </div>
+
+                <div class="card">
+                    <h3>Task Management</h3>
+                    <input type="text" id="task-name-input" placeholder="Task Name (e.g., Follow X)">
+                    <input type="text" id="task-reward-input" placeholder="Reward Coins (e.g., 200)">
+                    <input type="text" id="task-link-input" placeholder="Link (e.g., https://t.me/channel)">
+                    <button onclick="addTask()">Add New Task</button>
+                    <h4>Current Tasks</h4>
+                    <div id="admin-tasks-list"></div>
+                </div>
+
+                <div class="card">
+                    <h3>Withdrawal Requests</h3>
+                    <div id="admin-withdrawal-list">
+                        <p>No pending requests.</p>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div id="tab-bar">
+            <button class="tab-button active" data-screen="tap-earn-screen"><span>👆</span>Tap & Earn</button>
+            <button class="tab-button" data-screen="tasks-screen"><span>📋</span>Tasks</button>
+            <button class="tab-button" data-screen="withdrawal-screen"><span>💸</span>Withdraw</button>
+            <button class="tab-button" data-screen="profile-screen"><span>👤</span>Profile</button>
+        </div>
+        
+    </div>
+
+    <script>
+        // Check if Admin Mode is needed (based on URL parameter)
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAdminMode = urlParams.get('mode') === 'admin' && !window.Telegram; // Check for 'mode=admin' AND NOT inside Telegram WebApp
+
+        if (isAdminMode) {
+            document.getElementById('tap-earn-screen').classList.remove('active');
+            document.getElementById('admin-panel').classList.add('active');
+            document.getElementById('tab-bar').style.display = 'none';
+        } else {
+            document.getElementById('admin-panel').style.display = 'none';
+        }
+        
+        // --- Firebase Configuration and Initialization ---
+        
+        // 🚨 IMPORTANT: Replace this with your actual Firebase project configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY", // PLACEHOLDER
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // PLACEHOLDER
+            projectId: "YOUR_PROJECT_ID", // PLACEHOLDER
+            storageBucket: "YOUR_PROJECT_ID.appspot.com", // PLACEHOLDER
+            messagingSenderId: "YOUR_SENDER_ID", // PLACEHOLDER
+            appId: "YOUR_APP_ID" // PLACEHOLDER
+        };
+
+        // Initialize Firebase
+        if (firebase.apps.length === 0) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        // Global User Data Variables
+        let userId = 'web_user_' + Math.random().toString(36).substring(2, 9); // Fallback ID for web browser
+        let userData = {
+            coins: 0,
+            level: 1,
+            referrals: 0,
+            telegramId: 'N/A',
+            username: 'N/A',
+            firstName: 'Web User',
+            photoUrl: ''
+        };
+        let globalTasks = [];
+        let globalSettings = {
+            conversionRate: 10000 // 1 USDT = 10000 Coins
+        };
+
+        // --- Telegram WebApp Integration and Theme Setup ---
+        
+        if (window.Telegram && Telegram.WebApp) {
+            const tg = Telegram.WebApp;
+            tg.ready();
+            
+            // Set Dark Theme class if WebApp is running
+            document.body.classList.add('telegram-web-app-theme');
+
+            // Apply Telegram's background color dynamically
+            if (tg.themeParams.bg_color) {
+                document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color);
+                document.documentElement.style.setProperty('--tg-theme-secondary-bg-color', tg.themeParams.secondary_bg_color || '#232e3c');
+                document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#ffffff');
+                document.documentElement.style.setProperty('--tg-theme-link-color', tg.themeParams.link_color || '#6ab3f3');
+                document.documentElement.style.setProperty('--tg-theme-button-color', tg.themeParams.button_color || '#5288c1');
+            }
+
+            // Get User Data from WebApp Init Data
+            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                const user = tg.initDataUnsafe.user;
+                userId = String(user.id); // Use Telegram User ID as Firebase Document ID
+                userData.telegramId = user.id;
+                userData.username = user.username || 'N/A';
+                userData.firstName = user.first_name || 'User';
+                
+                // Note: Telegram WebApp API does not directly provide a profile photo URL on initDataUnsafe.user.
+                // A bot API call (server-side) is required to fetch the photo, which is beyond the scope of a single HTML file.
+                // For a proper solution, you'd send initData to a server to get full user data including photo.
+            }
+        }
+        
+        // --- Core Functions: Load/Save Data ---
+
+        async function loadData() {
+            // 1. Load from LocalStorage (for speed)
+            const localData = localStorage.getItem('tapEarnData_' + userId);
+            if (localData) {
+                userData = { ...userData, ...JSON.parse(localData) };
+                console.log('Data loaded from LocalStorage.');
+            }
+
+            // 2. Load from Firebase (authoritative source)
+            try {
+                // Fetch User Data
+                const userDoc = await db.collection('users').doc(userId).get();
+                if (userDoc.exists) {
+                    userData = { ...userData, ...userDoc.data() };
+                    console.log('Data loaded from Firebase.');
+                } else {
+                    // Create new user if not found
+                    await db.collection('users').doc(userId).set(userData);
+                    console.log('New user created in Firebase.');
+                }
+                
+                // Fetch Tasks
+                const tasksSnapshot = await db.collection('tasks').get();
+                globalTasks = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // Fetch Settings
+                const settingsDoc = await db.collection('settings').doc('conversion').get();
+                if (settingsDoc.exists) {
+                    globalSettings = { ...globalSettings, ...settingsDoc.data() };
+                }
+
+                // 3. Update LocalStorage with Firebase data
+                saveLocalData();
+                
+            } catch (error) {
+                console.error("Error loading data from Firebase:", error);
+                
