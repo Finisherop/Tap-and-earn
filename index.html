@@ -1,514 +1,353 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TAP & EARN Bot</title>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        /* === CSS: Dark Theme and Mobile Friendly UI === */
-        :root {
-            /* Telegram WebApp Theme Vars (Fallback to Dark Theme) */
-            --tg-theme-bg-color: #17212b;
-            --tg-theme-secondary-bg-color: #232e3c;
-            --tg-theme-text-color: #ffffff;
-            --tg-theme-hint-color: #708499;
-            --tg-theme-link-color: #6ab3f3;
-            --tg-theme-button-color: #5288c1;
-            --tg-theme-button-text-color: #ffffff;
-            --tg-theme-header-bg-color: #17212b;
-        }
-
-        /* Override with Telegram WebApp colors if available */
-        body.telegram-web-app-theme {
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-        }
-
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-            transition: background-color 0.3s, color 0.3s;
-            overflow-x: hidden; /* For screen/tab switching */
-        }
-
-        /* --- Main Layout: Tabs and Screens --- */
-        #app-container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            max-width: 600px; /* Standard mobile width constraint */
-            margin: 0 auto;
-        }
-
-        #screens-container {
-            flex-grow: 1;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            padding: 20px;
-            box-sizing: border-box;
-            background-color: var(--tg-theme-bg-color);
-            transition: transform 0.3s ease-in-out;
-            transform: translateX(100%);
-            overflow-y: auto;
-            display: none; /* Initial hide */
-        }
-
-        .screen.active {
-            transform: translateX(0);
-            display: block;
-        }
-        
-        /* Tab Bar Styling */
-        #tab-bar {
-            display: flex;
-            justify-content: space-around;
-            padding: 10px 0;
-            background-color: var(--tg-theme-header-bg-color);
-            border-top: 1px solid var(--tg-theme-secondary-bg-color);
-            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.5);
-            z-index: 10;
-        }
-
-        .tab-button {
-            background: none;
-            border: none;
-            color: var(--tg-theme-hint-color);
-            padding: 10px;
-            font-size: 14px;
-            cursor: pointer;
-            outline: none;
-            flex: 1;
-            text-align: center;
-        }
-
-        .tab-button.active {
-            color: var(--tg-theme-link-color);
-            font-weight: bold;
-        }
-        
-        .tab-button span {
-            display: block;
-            font-size: 20px;
-            margin-bottom: 3px;
-        }
-
-        /* --- Tap & Earn Section Specifics --- */
-        #tap-area {
-            text-align: center;
-            padding: 50px 0;
-            cursor: pointer;
-        }
-
-        #usdt-animation-box {
-            position: relative;
-            width: 150px;
-            height: 150px;
-            margin: 0 auto 20px auto;
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 20px rgba(82, 136, 193, 0.5); /* Button Color Glow */
-            animation: bounce 2s infinite alternate; /* Bouncing effect */
-        }
-        
-        #usdt-animation-box span {
-            font-size: 60px;
-            transition: transform 0.1s;
-        }
-
-        @keyframes bounce {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-15px); }
-        }
-
-        /* Coin Credit Animation */
-        .coin-credit {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            color: gold;
-            opacity: 0;
-            animation: credit-anim 0.8s ease-out forwards;
-            pointer-events: none; /* So it doesn't block clicks */
-        }
-
-        @keyframes credit-anim {
-            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-            100% { opacity: 0; transform: translate(-50%, -150%) scale(1.5); }
-        }
-
-        /* --- General UI Components --- */
-        h2 {
-            color: var(--tg-theme-link-color);
-            border-bottom: 2px solid var(--tg-theme-secondary-bg-color);
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        
-        .card {
-            background-color: var(--tg-theme-secondary-bg-color);
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .level-bar-container {
-            height: 10px;
-            background-color: var(--tg-theme-hint-color);
-            border-radius: 5px;
-            margin-top: 5px;
-            overflow: hidden;
-        }
-
-        .level-bar {
-            height: 100%;
-            width: 0;
-            background-color: gold;
-            transition: width 0.5s ease-out;
-        }
-
-        .task-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .task-item:last-child {
-            border-bottom: none;
-        }
-
-        button {
-            background-color: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            border: none;
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-
-        button:hover {
-            background-color: #6a9cc9; /* Slightly lighter shade */
-        }
-        
-        input[type="text"], input[type="number"], textarea {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            box-sizing: border-box;
-            background-color: var(--tg-theme-bg-color);
-            border: 1px solid var(--tg-theme-hint-color);
-            border-radius: 4px;
-            color: var(--tg-theme-text-color);
-        }
-
-        .referral-link-box {
-            background-color: var(--tg-theme-bg-color);
-            padding: 10px;
-            border: 1px dashed var(--tg-theme-link-color);
-            border-radius: 5px;
-            word-break: break-all;
-            margin-top: 10px;
-        }
-
-        /* Admin Section - Only for web browser, hidden in WebApp */
-        body:not(.telegram-web-app-theme) #admin-link {
-            display: block; /* Show in normal browser */
-            text-align: center;
-            padding: 10px;
-            margin-top: 20px;
-            background-color: var(--tg-theme-secondary-bg-color);
-            border-radius: 8px;
-        }
-
-        .admin-stat {
-            font-size: 1.2em;
-            margin: 10px 0;
-            padding: 5px;
-            background-color: var(--tg-theme-bg-color);
-            border-radius: 5px;
-        }
-
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTEUP 1st Sem — Study & Test</title>
+  <style>
+    :root { --bg:#f6f7fb; --text:#0f1222; --card:#ffffff; --muted:#6b7280; --accent:#2563eb; --accent2:#10b981; --border:#e5e7eb; }
+    .dark { --bg:#0b0e16; --text:#e5e7eb; --card:#0f1422; --muted:#9aa1ad; --accent:#60a5fa; --accent2:#34d399; --border:#1f2433; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;line-height:1.5}
+    header{position:sticky;top:0;background:color-mix(in srgb,var(--card) 85%, transparent);backdrop-filter:saturate(1.2) blur(8px);border-bottom:1px solid var(--border);z-index:10}
+    .container{max-width:1000px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .title{font-weight:800;font-size:20px}
+    .pill{font-size:12px;color:var(--muted)}
+    .btn{border:1px solid var(--border);background:var(--card);padding:8px 12px;border-radius:10px;color:var(--text);cursor:pointer}
+    .btn.primary{background:var(--accent);color:white;border-color:transparent}
+    .btn.success{background:var(--accent2);color:#012b1c;border-color:transparent}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:900px){.grid{grid-template-columns:260px 1fr}}
+    .panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+    .nav a{display:block;padding:8px 10px;border-radius:8px;color:var(--text);text-decoration:none;border:1px solid transparent}
+    .nav a.active{background:color-mix(in srgb,var(--accent) 10%, var(--card));border-color:var(--border)}
+    details{border:1px dashed var(--border);border-radius:10px;padding:10px}
+    summary{cursor:pointer;font-weight:700}
+    .muted{color:var(--muted)}
+    .q{padding:10px;border:1px solid var(--border);border-radius:10px;margin:10px 0;background:color-mix(in srgb,var(--card) 70%, transparent)}
+    .opt{display:block;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin:6px 0;cursor:pointer}
+    .opt.selected{border-color:var(--accent)}
+    .opt.correct{background:color-mix(in srgb,var(--accent2) 25%, var(--card));border-color:var(--accent2)}
+    .opt.wrong{background:color-mix(in srgb,#ef4444 20%, var(--card));border-color:#ef4444}
+    .score{font-weight:800}
+    .footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:var(--bg);padding:2px 6px;border-radius:6px;border:1px solid var(--border)}
+    .tag{display:inline-block;padding:2px 8px;background:color-mix(in srgb,var(--accent) 15%, var(--card));border:1px solid var(--border);border-radius:999px;font-size:12px;margin-right:6px}
+  </style>
 </head>
-<body id="app-body">
-
-    <div id="app-container">
-        
-        <div id="screens-container">
-            
-            <div id="tap-earn-screen" class="screen active">
-                <h2>💰 Tap & Earn</h2>
-                
-                <div class="card">
-                    <p>Current Coins: <strong id="current-coins">0</strong></p>
-                    <p>Level: <strong id="current-level">1</strong></p>
-                    <p>Next Level in: <span id="coins-to-next-level">1000</span> coins</p>
-                    <div class="level-bar-container"><div id="level-progress-bar" class="level-bar"></div></div>
-                </div>
-
-                <div id="tap-area">
-                    <div id="usdt-animation-box">
-                        <span style="font-size: 60px;">💎</span> </div>
-                    <p style="color: var(--tg-theme-hint-color);">Tap the diamond to earn coins!</p>
-                </div>
-            </div>
-
-            <div id="tasks-screen" class="screen">
-                <h2>📋 Tasks & Referrals</h2>
-
-                <div class="card">
-                    <h3>Special Tasks</h3>
-                    <div id="tasks-list">
-                        <div class="task-item">
-                            <span>Watch 3 Ads (Monotag)</span>
-                            <button onclick="watchAds()">+100 Coins</button>
-                        </div>
-                        <div class="task-item" id="channel-task">
-                            <span>Join Our Telegram Channel</span>
-                            <div>
-                                <a id="channel-link" href="#" target="_blank"><button>Join</button></a>
-                                <button onclick="verifyChannelJoin()" id="verify-channel-btn">Verify</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <h3>Refer & Earn</h3>
-                    <p>Invite friends and earn **500 coins** per successful referral! 🤝</p>
-                    <div class="referral-link-box" id="referral-link">Loading...</div>
-                    <button onclick="copyReferralLink()">Copy Link</button>
-                </div>
-            </div>
-
-            <div id="withdrawal-screen" class="screen">
-                <h2>💸 Withdrawal</h2>
-                
-                <div class="card">
-                    <p>Conversion Rate: **10,000 Coins = 1 USDT**</p>
-                    <p>Your Balance: <strong id="withdraw-coin-balance">0</strong> Coins</p>
-                    <p>Equivalent USDT: <strong id="usdt-equivalent">0.00</strong> USDT</p>
-                </div>
-
-                <div class="card">
-                    <h3>Request Withdrawal</h3>
-                    <label for="usdt-address">USDT (TRC-20/ERC-20) Wallet Address:</label>
-                    <input type="text" id="usdt-address" placeholder="Enter your USDT wallet address" required>
-                    
-                    <label for="withdraw-amount">Amount (Coins - Min 10000):</label>
-                    <input type="number" id="withdraw-amount" min="10000" step="10000" placeholder="e.g., 10000" required>
-                    
-                    <button onclick="submitWithdrawal()">Submit Request</button>
-                </div>
-
-                <div class="card">
-                    <h3>My Requests</h3>
-                    <div id="withdrawal-history">
-                        <p style="color: var(--tg-theme-hint-color);">No requests found.</p>
-                        </div>
-                </div>
-            </div>
-
-            <div id="profile-screen" class="screen">
-                <h2>👤 Profile</h2>
-
-                <div class="card" style="text-align: center;">
-                    <img id="profile-photo" src="" alt="Profile" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; display: none;">
-                    <p>Telegram ID: <strong id="profile-tg-id">N/A</strong></p>
-                    <p>Username: <strong id="profile-username">N/A</strong></p>
-                </div>
-                
-                <div class="card">
-                    <h3>Stats</h3>
-                    <p>Total Coins: <strong id="profile-coins">0</strong></p>
-                    <p>Current Level: <strong id="profile-level">1</strong></p>
-                    <p>Total Referrals: <strong id="profile-referrals">0</strong></p>
-                </div>
-            </div>
-
-            <div id="admin-panel" class="screen" style="display: none;">
-                <h2>👑 Admin Panel</h2>
-                
-                <div class="card">
-                    <h3>Dashboard</h3>
-                    <p class="admin-stat">Total Users: <strong id="admin-total-users">0</strong></p>
-                    <p class="admin-stat">Total Coins: <strong id="admin-total-coins">0</strong></p>
-                </div>
-
-                <div class="card">
-                    <h3>Conversion Settings</h3>
-                    <p>1 USDT = <input type="number" id="admin-conversion-rate" value="10000" min="1000" step="1000" style="width: 100px; display: inline-block;"> Coins</p>
-                    <button onclick="saveAdminSettings()">Save Settings</button>
-                </div>
-
-                <div class="card">
-                    <h3>Task Management</h3>
-                    <input type="text" id="task-name-input" placeholder="Task Name (e.g., Follow X)">
-                    <input type="text" id="task-reward-input" placeholder="Reward Coins (e.g., 200)">
-                    <input type="text" id="task-link-input" placeholder="Link (e.g., https://t.me/channel)">
-                    <button onclick="addTask()">Add New Task</button>
-                    <h4>Current Tasks</h4>
-                    <div id="admin-tasks-list"></div>
-                </div>
-
-                <div class="card">
-                    <h3>Withdrawal Requests</h3>
-                    <div id="admin-withdrawal-list">
-                        <p>No pending requests.</p>
-                    </div>
-                </div>
-
-            </div>
-
-        </div>
-
-        <div id="tab-bar">
-            <button class="tab-button active" data-screen="tap-earn-screen"><span>👆</span>Tap & Earn</button>
-            <button class="tab-button" data-screen="tasks-screen"><span>📋</span>Tasks</button>
-            <button class="tab-button" data-screen="withdrawal-screen"><span>💸</span>Withdraw</button>
-            <button class="tab-button" data-screen="profile-screen"><span>👤</span>Profile</button>
-        </div>
-        
+<body>
+  <header>
+    <div class="container row">
+      <div class="title">BTEUP 1st Sem — Study & Test</div>
+      <div class="pill">Offline ready</div>
+      <div style="margin-left:auto" class="row">
+        <button class="btn" id="toggleDark" title="Toggle dark mode">Dark/Light</button>
+        <button class="btn" id="downloadTxt" title="Export all notes as .txt">Export .txt</button>
+      </div>
     </div>
+  </header>  <main class="container grid">
+    <aside class="panel nav" id="nav"></aside>
+    <section class="panel" id="content">
+      <h2 id="subjectTitle"></h2>
+      <div id="tags"></div>
+      <p class="muted" id="hint">Tap a unit to expand. Then try the MCQ mini test below.</p>
+      <div id="units"></div><hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+  <h3>Mini Test (Previous-paper style)</h3>
+  <div id="quiz"></div>
+  <div class="row">
+    <button class="btn primary" id="evaluateBtn">Evaluate</button>
+    <button class="btn" id="resetBtn">Reset</button>
+    <div id="scoreBox" class="score"></div>
+  </div>
+</section>
 
-    <script>
-        // Check if Admin Mode is needed (based on URL parameter)
-        const urlParams = new URLSearchParams(window.location.search);
-        const isAdminMode = urlParams.get('mode') === 'admin' && !window.Telegram; // Check for 'mode=admin' AND NOT inside Telegram WebApp
+  </main>  <p class="footer">Tip: Use <span class="kbd">Ctrl</span>+<span class="kbd">F</span> to search any formula quickly. Your answers are saved locally.</p><script>
+// ---- DATA (notes + questions) ----
+const data = {
+  Mathematics: {
+    tags: ["High weight: Calculus", "Complex Numbers", "Trigonometry"],
+    units: [
+      { title: "Trigonometry", points: [
+        "sin(A+B)=sinAcosB+cosAsinB, cos(A+B)=cosAcosB-sinAsinB",
+        "Product to sum: sinAcosB = 1/2[sin(A+B)+sin(A-B)]",
+        "Simple trig equations; basic graphs of sin, cos, tan"
+      ]},
+      { title: "Differential Calculus", points: [
+        "Limits: sin x / x -> 1, (1+x)^(1/x) -> e",
+        "Derivatives: d(x^n)=n x^(n-1); d(sin x)=cos x; d(e^x)=e^x; chain rule",
+        "Tangent/Normal slope; Maxima–Minima via f'(x)=0 (check nature)"
+      ]},
+      { title: "Partial Fractions", points: [
+        "Linear non-repeated factors; 1/(x^2 - a^2) type",
+        "Compare coefficients to find constants"
+      ]},
+      { title: "Binomial Theorem", points: [
+        "General term T(r+1)=C(n,r) a^(n-r) b^r; middle/independent term"
+      ]},
+      { title: "Complex Numbers", points: [
+        "z=a+ib; |z|=sqrt(a^2+b^2); arg(z)=tan^-1(b/a)",
+        "Polar <-> Cartesian; De Moivre (cos t + i sin t)^n"
+      ]},
+    ],
+    mcq: [
+      { q: "If y=x^3, dy/dx at x=2 is?", options:["6","12","8","3"], a:1, explain:"dy/dx=3x^2 => 12" },
+      { q: "sin60 cos30 + cos60 sin30 = ?", options:["sin90","cos30","1/2","sqrt(3)/2"], a:0, explain:"sin(A+B)=sin90" },
+      { q: "Modulus of z=3-4i is:", options:["5","1","7","sqrt(7)"], a:0, explain:"sqrt(9+16)=5" },
+      { q: "Independent term in (x + 1/x)^6 is:", options:["20","15","40","0"], a:0, explain:"x^0 at r=3 -> C(6,3)=20" },
+      { q: "1/(x^2-1) decomposes as:", options:["A/(x-1)+B/(x+1)","A/x+B/x^2","A/(x-1)^2","None"], a:0, explain:"non-repeated linear" }
+    ]
+  },
+  Physics: {
+    tags: ["Numericals heavy", "Formulas focus"],
+    units: [
+      { title: "Units & Dimensions", points:[
+        "Dimensional formulae of Force, Work, Power, Energy, Pressure",
+        "Use dimensional analysis to check correctness"
+      ]},
+      { title: "Force & Motion", points:[
+        "F=ma; momentum mv; conservation m1u1+m2u2=m1v1+m2v2",
+        "Friction: static>kinetic; F=mu N"
+      ]},
+      { title: "Work, Power, Energy", points:[
+        "W=F s cos(theta); P=W/t; KE=1/2 m v^2; PE=m g h"
+      ]},
+      { title: "Rotational Motion", points:[
+        "Torque tau=r x F; I for rod, ring, disc, sphere (remember forms)",
+        "Angular momentum conserved if external torque is zero"
+      ]},
+      { title: "Properties of Matter & Fluids", points:[
+        "Stress-strain; Hooke's law; surface tension & capillarity",
+        "Viscosity & Stokes law; Bernoulli concept"
+      ]},
+      { title: "Heat & Thermometry", points:[
+        "Celsius-Kelvin; conduction, convection, radiation (definitions)"
+      ]},
+    ],
+    mcq: [
+      { q:"Unit of power is:", options:["Joule","Watt","Newton","Pascal"], a:1, explain:"Watt" },
+      { q:"Momentum is:", options:["m/a","ma","mv","v/m"], a:2, explain:"p=mv" },
+      { q:"Work at 60deg with F=10N, s=2m:", options:["10J","20J","5J","0"], a:0, explain:"10*2*0.5" },
+      { q:"Dimension of Pressure:", options:["M L^-1 T^-2","M L T^-2","dimensionless","M L^2 T^-2"], a:0, explain:"Force/Area" },
+      { q:"Angular momentum conserved when:", options:["No external torque","No force","No friction","No gravity"], a:0, explain:"tau_ext=0" }
+    ]
+  },
+  Chemistry: {
+    tags: ["Definitions + short numericals"],
+    units: [
+      { title: "Atomic Structure & Bonding", points:[
+        "Quantum numbers n,l,m,s; e-config (Z<=30)",
+        "Ionic, covalent, coordinate; hybridization CH4, NH3, H2O"
+      ]},
+      { title: "Water (Hardness & Treatment)", points:[
+        "Temporary vs permanent; units ppm/mgL",
+        "Zeolite & Ion-exchange; boiler problems (scale, sludge, priming)"
+      ]},
+      { title: "Engineering Materials", points:[
+        "Ores of Fe/Al/Cu; extraction of Al; Portland cement basics",
+        "Polymers: PVC, Nylon, Bakelite (uses)"
+      ]},
+      { title: "Fuels & Lubricants", points:[
+        "HCV/LCV; Dulong idea; LPG/CNG/biogas basics",
+        "Lubricant properties: viscosity, flash/fire, pour point"
+      ]},
+      { title: "Electrochemistry & Corrosion", points:[
+        "Faraday laws (m=E I t / 96500); galvanic cell basics",
+        "Corrosion control: galvanising, alloying, cathodic protection"
+      ]},
+    ],
+    mcq: [
+      { q:"Quantum numbers needed per electron:", options:["2","3","4","5"], a:2, explain:"n,l,m,s" },
+      { q:"Hardness unit:", options:["ppm","ampere","candela","volt"], a:0, explain:"ppm/mgL" },
+      { q:"Highest HCV: LPG, Wood, Coal, Biogas", options:["Wood","Coal","LPG","Biogas"], a:2, explain:"LPG" },
+      { q:"Faraday constant approx:", options:["96500 C/mol","9.65 C/mol","965 C/mol","None"], a:0, explain:"~96485" },
+      { q:"Corrosion control:", options:["Galvanising","Heating","Painting only","Alloy dissolving"], a:0, explain:"Zn coating" }
+    ]
+  },
+  English: {
+    tags: ["Grammar + Writing"],
+    units: [
+      { title: "Grammar Essentials", points:[
+        "Tenses (present/past focus); Active-Passive; Direct-Indirect",
+        "One-word, idioms, punctuation basics"
+      ]},
+      { title: "Professional Writing", points:[
+        "Official letter format; CV/Resume blocks; report basics"
+      ]},
+      { title: "Reading & Soft Skills", points:[
+        "Comprehension practice; 7C's; barriers of communication"
+      ]},
+    ],
+    mcq: [
+      { q:"Passive of 'They make chairs.':", options:["Chairs are made.","Chairs made.","Chairs is made.","Chairs are make."], a:0, explain:"are made" },
+      { q:"He ___ here since 2022.", options:["works","has worked","worked","is work"], a:1, explain:"present perfect" },
+      { q:"A person who loves books:", options:["Audiophile","Bibliophile","Xylophile","Hodophile"], a:1, explain:"biblio=book" },
+      { q:"Letter order correct:", options:["Subject->Salutation->Body","To->Subject->Salutation->Body","Body->Subject->To","Signature->Subject"], a:1, explain:"To/From then Subject" },
+      { q:"Its/It's raining.", options:["Its","It's"], a:1, explain:"It is" }
+    ]
+  },
+  Graphics: {
+    tags: ["Practice drawings"],
+    units: [
+      { title: "Basics & Dimensioning", points:[
+        "Line types, lettering, RF & plain scale"
+      ]},
+      { title: "Orthographic Projections", points:[
+        "1st-angle; 3 standard views; hidden & centre lines"
+      ]},
+      { title: "Projection of Solids", points:[
+        "Cylinder, cone, prism; axis parallel/inclined (simple cases)"
+      ]},
+      { title: "Isometric Projections", points:[
+        "30 deg axes; cube/prism/pyramid/cone from 2D views"
+      ]},
+      { title: "AutoCAD Intro", points:[
+        "LINE, CIRCLE, TRIM, OFFSET, COPY, ERASE; quick dims"
+      ]},
+    ],
+    mcq: [
+      { q:"Projection method used:", options:["3rd angle","1st angle","Axonometric only","None"], a:1, explain:"1st angle" },
+      { q:"Isometric axes angle:", options:["15°","30°","45°","60°"], a:1, explain:"30°" },
+      { q:"Hidden edges drawn with:", options:["Continuous thick","Dashed thin","Chain thick","Centre thin"], a:1, explain:"dashed thin" },
+      { q:"Reducing scale has:", options:["RF>1","RF=1","RF<1","None"], a:2, explain:"less than 1" },
+      { q:"AutoCAD to copy:", options:["CP","CO/Copy","MV","TR"], a:1, explain:"CO/COPY" }
+    ]
+  }
+};
 
-        if (isAdminMode) {
-            document.getElementById('tap-earn-screen').classList.remove('active');
-            document.getElementById('admin-panel').classList.add('active');
-            document.getElementById('tab-bar').style.display = 'none';
-        } else {
-            document.getElementById('admin-panel').style.display = 'none';
-        }
-        
-        // --- Firebase Configuration and Initialization ---
-        
-        // 🚨 IMPORTANT: Replace this with your actual Firebase project configuration
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY", // PLACEHOLDER
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com", // PLACEHOLDER
-            projectId: "YOUR_PROJECT_ID", // PLACEHOLDER
-            storageBucket: "YOUR_PROJECT_ID.appspot.com", // PLACEHOLDER
-            messagingSenderId: "YOUR_SENDER_ID", // PLACEHOLDER
-            appId: "YOUR_APP_ID" // PLACEHOLDER
-        };
+// ---- State ----
+let active = Object.keys(data)[0];
+const answers = JSON.parse(localStorage.getItem("answers") || "{}");
+const darkSaved = localStorage.getItem("dark") === "1";
+if (darkSaved) document.documentElement.classList.add("dark");
 
-        // Initialize Firebase
-        if (firebase.apps.length === 0) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
+// ---- DOM helpers ----
+const nav = document.getElementById("nav");
+const unitsEl = document.getElementById("units");
+const quizEl = document.getElementById("quiz");
+const subjectTitle = document.getElementById("subjectTitle");
+const scoreBox = document.getElementById("scoreBox");
+const tags = document.getElementById("tags");
 
-        // Global User Data Variables
-        let userId = 'web_user_' + Math.random().toString(36).substring(2, 9); // Fallback ID for web browser
-        let userData = {
-            coins: 0,
-            level: 1,
-            referrals: 0,
-            telegramId: 'N/A',
-            username: 'N/A',
-            firstName: 'Web User',
-            photoUrl: ''
-        };
-        let globalTasks = [];
-        let globalSettings = {
-            conversionRate: 10000 // 1 USDT = 10000 Coins
-        };
+function renderNav(){
+  nav.innerHTML = "";
+  Object.keys(data).forEach(name => {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = name;
+    a.className = name===active ? "active" : "";
+    a.onclick = (e)=>{e.preventDefault(); active=name; scoreBox.textContent=""; render();};
+    nav.appendChild(a);
+  });
+}
 
-        // --- Telegram WebApp Integration and Theme Setup ---
-        
-        if (window.Telegram && Telegram.WebApp) {
-            const tg = Telegram.WebApp;
-            tg.ready();
-            
-            // Set Dark Theme class if WebApp is running
-            document.body.classList.add('telegram-web-app-theme');
+function renderUnits(){
+  unitsEl.innerHTML = "";
+  data[active].units.forEach(u => {
+    const det = document.createElement("details");
+    const sum = document.createElement("summary");
+    sum.textContent = u.title;
+    det.appendChild(sum);
+    const ul = document.createElement("ul");
+    u.points.forEach(p => {
+      const li = document.createElement("li"); li.textContent = p; ul.appendChild(li);
+    });
+    det.appendChild(ul);
+    unitsEl.appendChild(det);
+  });
+}
 
-            // Apply Telegram's background color dynamically
-            if (tg.themeParams.bg_color) {
-                document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color);
-                document.documentElement.style.setProperty('--tg-theme-secondary-bg-color', tg.themeParams.secondary_bg_color || '#232e3c');
-                document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#ffffff');
-                document.documentElement.style.setProperty('--tg-theme-link-color', tg.themeParams.link_color || '#6ab3f3');
-                document.documentElement.style.setProperty('--tg-theme-button-color', tg.themeParams.button_color || '#5288c1');
-            }
+function renderTags(){
+  tags.innerHTML = "";
+  (data[active].tags||[]).forEach(t => {
+    const s = document.createElement("span"); s.className = "tag"; s.textContent = t; tags.appendChild(s);
+  });
+}
 
-            // Get User Data from WebApp Init Data
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                const user = tg.initDataUnsafe.user;
-                userId = String(user.id); // Use Telegram User ID as Firebase Document ID
-                userData.telegramId = user.id;
-                userData.username = user.username || 'N/A';
-                userData.firstName = user.first_name || 'User';
-                
-                // Note: Telegram WebApp API does not directly provide a profile photo URL on initDataUnsafe.user.
-                // A bot API call (server-side) is required to fetch the photo, which is beyond the scope of a single HTML file.
-                // For a proper solution, you'd send initData to a server to get full user data including photo.
-            }
-        }
-        
-        // --- Core Functions: Load/Save Data ---
+function renderQuiz(){
+  quizEl.innerHTML = "";
+  (data[active].mcq||[]).forEach((q, idx) => {
+    const wrap = document.createElement("div"); wrap.className = "q";
+    const qq = document.createElement("div"); qq.textContent = (idx+1)+". "+q.q; wrap.appendChild(qq);
+    q.options.forEach((opt, oi) => {
+      const b = document.createElement("div");
+      const key = active + "_" + idx;
+      const saved = answers[key];
+      b.className = "opt" + (saved===oi ? " selected" : "");
+      b.textContent = opt;
+      b.onclick = () => {
+        answers[key] = oi;
+        localStorage.setItem("answers", JSON.stringify(answers));
+        renderQuiz();
+      };
+      wrap.appendChild(b);
+    });
+    quizEl.appendChild(wrap);
+  });
+}
 
-        async function loadData() {
-            // 1. Load from LocalStorage (for speed)
-            const localData = localStorage.getItem('tapEarnData_' + userId);
-            if (localData) {
-                userData = { ...userData, ...JSON.parse(localData) };
-                console.log('Data loaded from LocalStorage.');
-            }
+function evaluate(){
+  const qs = data[active].mcq||[];
+  let s=0;
+  qs.forEach((q, idx) => {
+    const key = active + "_" + idx;
+    const chosen = answers[key];
+    const nodes = quizEl.querySelectorAll(".q")[idx].querySelectorAll(".opt");
+    nodes.forEach((n, oi) => {
+      n.classList.remove("correct","wrong","selected");
+      if (oi === q.a) n.classList.add("correct");
+      if (chosen === oi && oi !== q.a) n.classList.add("wrong");
+      if (chosen === oi && oi === q.a) n.classList.add("correct");
+    });
+    if (chosen === q.a) s++;
+  });
+  scoreBox.textContent = "Score: " + s + "/" + qs.length;
+}
 
-            // 2. Load from Firebase (authoritative source)
-            try {
-                // Fetch User Data
-                const userDoc = await db.collection('users').doc(userId).get();
-                if (userDoc.exists) {
-                    userData = { ...userData, ...userDoc.data() };
-                    console.log('Data loaded from Firebase.');
-                } else {
-                    // Create new user if not found
-                    await db.collection('users').doc(userId).set(userData);
-                    console.log('New user created in Firebase.');
-                }
-                
-                // Fetch Tasks
-                const tasksSnapshot = await db.collection('tasks').get();
-                globalTasks = tasksSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+function resetTest(){
+  const qs = data[active].mcq||[];
+  qs.forEach((_, idx) => {
+    const key = active + "_" + idx;
+    delete answers[key];
+  });
+  localStorage.setItem("answers", JSON.stringify(answers));
+  scoreBox.textContent = "";
+  renderQuiz();
+}
 
-                // Fetch Settings
-                const settingsDoc = await db.collection('settings').doc('conversion').get();
-                if (settingsDoc.exists) {
-                    globalSettings = { ...globalSettings, ...settingsDoc.data() };
-                }
+function exportTxt(){
+  let out = "BTEUP 1st Semester — Study Notes (All Subjects)\n\n";
+  Object.entries(data).forEach(([subj, val]) => {
+    out += "== " + subj + " ==\n";
+    (val.units||[]).forEach(u => {
+      out += "-- " + u.title + " --\n";
+      u.points.forEach(p => out += "• " + p + "\n");
+      out += "\n";
+    });
+    out += "\n";
+  });
+  const blob = new Blob([out], {type: "text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "BTEUP_1st_Sem_Notes.txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
 
-                // 3. Update LocalStorage with Firebase data
-                saveLocalData();
-                
-            } catch (error) {
-                console.error("Error loading data from Firebase:", error);
-                
+function render(){
+  subjectTitle.textContent = active;
+  renderTags();
+  renderUnits();
+  renderQuiz();
+}
+
+document.getElementById("toggleDark").onclick = () => {
+  document.documentElement.classList.toggle("dark");
+  localStorage.setItem("dark", document.documentElement.classList.contains("dark") ? "1" : "0");
+};
+document.getElementById("downloadTxt").onclick = exportTxt;
+document.getElementById("evaluateBtn").onclick = evaluate;
+document.getElementById("resetBtn").onclick = resetTest;
+
+renderNav(); render();
+</script></body>
+</html>
